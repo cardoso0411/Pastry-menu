@@ -265,7 +265,7 @@ function Header({
           >
             Cardápio
           </button>
-          <button onClick={() => navigate("tracking")}>Meus pedidos</button>
+          <button onClick={() => navigate("tracking")}>Acompanhar pedido</button>
           <button onClick={() => navigate("admin")}>Área da loja</button>
         </nav>
         <div className="header-actions">
@@ -299,7 +299,7 @@ function Header({
           {([
             ["home", "Início"],
             ["menu", "Cardápio"],
-            ["tracking", "Meus pedidos"],
+            ["tracking", "Acompanhar pedido"],
             ["admin", "Área da loja"],
           ] as [Page, string][]).map(([target, label]) => (
             <button
@@ -362,9 +362,11 @@ function ProductCard({
 function Home({
   navigate,
   add,
+  tableNumber,
 }: {
   navigate: (p: Page) => void
   add: (product: Product) => void
+  tableNumber: string
 }) {
   return (
     <main>
@@ -379,15 +381,15 @@ function Home({
             <em>Irresistível</em> por dentro.
           </Heading>
           <p>
-            Escolha seu pastel favorito, monte seu pedido e receba quentinho.
-            Sem complicação.
+            Escolha seus favoritos pelo tablet da mesa. A gente prepara tudo
+            na hora e leva até você.
           </p>
           <div className="hero-actions">
             <Button onClick={() => navigate("menu")} icon="arrow">
               Ver cardápio
             </Button>
             <span>
-              <Icon name="clock" /> Entrega em 30–45 min
+              <Icon name="location" /> Atendimento na mesa {tableNumber}
             </span>
           </div>
         </div>
@@ -494,15 +496,15 @@ function Home({
         <div>
           <Icon name="location" />
           <span>
-            <strong>Entrega rápida</strong>
-            <small>Confira seu endereço</small>
+            <strong>Peça pelo tablet</strong>
+            <small>Sem fila, direto da sua mesa</small>
           </span>
         </div>
         <div>
           <Icon name="star" />
           <span>
-            <strong>Ingredientes frescos</strong>
-            <small>Qualidade em cada mordida</small>
+            <strong>Servido na sua mesa</strong>
+            <small>Preparado na hora, com carinho</small>
           </span>
         </div>
       </section>
@@ -738,22 +740,14 @@ function CartPage({
               <span>Subtotal</span>
               <b>{money(subtotal)}</b>
             </div>
-            <div>
-              <span>Taxa de entrega</span>
-              <b>{money(5)}</b>
-            </div>
-            <div className="discount">
-              <span>Desconto</span>
-              <b>− {money(3)}</b>
-            </div>
             <hr />
             <div className="total">
               <span>Total</span>
-              <b>{money(subtotal + 2)}</b>
+              <b>{money(subtotal)}</b>
             </div>
-            <small>Pagamento seguro na próxima etapa</small>
+            <small>Pedido para consumo na pastelaria</small>
             <Button onClick={() => navigate("checkout")} icon="arrow">
-              Continuar
+              Revisar pedido
             </Button>
           </aside>
         </div>
@@ -765,12 +759,22 @@ function CartPage({
 function Checkout({
   navigate,
   total,
+  cart,
+  tableNumber,
 }: {
   navigate: (p: Page) => void
   total: number
+  cart: Product[]
+  tableNumber: string
 }) {
   const [step, setStep] = useState(1)
-  const titles = ["Identificação", "Endereço", "Atendimento", "Revisão"]
+  const titles = ["Mesa", "Pagamento", "Revisão"]
+  const grouped = products
+    .map((product) => ({
+      ...product,
+      quantity: cart.filter((item) => item.id === product.id).length,
+    }))
+    .filter((product) => product.quantity > 0)
   return (
     <main className="checkout-page shell">
       <button
@@ -782,7 +786,7 @@ function Checkout({
       <div className="checkout-header">
         <div>
           <span className="eyebrow">
-            <i /> Finalize seu pedido
+            <i /> Pedido para consumo na pastelaria
           </span>
           <Heading as={1}>{titles[step - 1]}</Heading>
         </div>
@@ -800,145 +804,101 @@ function Checkout({
         <section className="checkout-form">
           {step === 1 && (
             <>
-              <Heading as={3}>Como podemos falar com você?</Heading>
-              <div className="field-grid">
-                <label>
-                  Nome completo
-                  <input defaultValue="Marina Alves" />
-                </label>
-                <label>
-                  WhatsApp
-                  <input defaultValue="(11) 99999-1234" />
-                </label>
-                <label className="wide">
-                  E-mail
-                  <input defaultValue="marina@email.com" />
-                </label>
+              <Heading as={3}>Este pedido será servido na sua mesa</Heading>
+              <div className="review-card">
+                <div>
+                  <span>Mesa</span>
+                  <strong>{tableNumber}</strong>
+                  <small>Confira se o número corresponde à sua mesa.</small>
+                </div>
               </div>
             </>
           )}
           {step === 2 && (
             <>
-              <Heading as={3}>Onde vamos entregar?</Heading>
-              <div className="field-grid">
-                <label>
-                  CEP
-                  <input defaultValue="01310-100" />
+              <Heading as={3}>Como prefere pagar?</Heading>
+              <div className="choice-list compact">
+                <label className="selected">
+                  <input type="radio" name="payment" defaultChecked />
+                  <span>
+                    <strong>No caixa</strong>
+                    <small>Ao terminar sua refeição</small>
+                  </span>
                 </label>
                 <label>
-                  Rua
-                  <input defaultValue="Av. Paulista" />
+                  <input type="radio" name="payment" />
+                  <span>
+                    <strong>Pix pelo tablet</strong>
+                    <small>Faça o pagamento pelo celular</small>
+                  </span>
                 </label>
                 <label>
-                  Número
-                  <input defaultValue="123" />
-                </label>
-                <label>
-                  Complemento
-                  <input placeholder="Apto, bloco..." />
-                </label>
-                <label className="wide">
-                  Bairro
-                  <input defaultValue="Bela Vista" />
+                  <input type="radio" name="payment" />
+                  <span>
+                    <strong>Cartão na mesa</strong>
+                    <small>Solicite a maquininha à equipe</small>
+                  </span>
                 </label>
               </div>
             </>
           )}
           {step === 3 && (
             <>
-              <Heading as={3}>Como você quer receber?</Heading>
-              <div className="choice-list">
-                <label className="selected">
-                  <input type="radio" name="delivery" defaultChecked />
-                  <Icon name="location" />
-                  <span>
-                    <strong>Entrega</strong>
-                    <small>30–45 min • R$ 5,00</small>
-                  </span>
-                </label>
-                <label>
-                  <input type="radio" name="delivery" />
-                  <Icon name="box" />
-                  <span>
-                    <strong>Retirar na loja</strong>
-                    <small>Pronto em 20–30 min • Grátis</small>
-                  </span>
-                </label>
-              </div>
-              <Heading as={3}>Forma de pagamento</Heading>
-              <div className="choice-list compact">
-                <label className="selected">
-                  <input type="radio" name="payment" defaultChecked />
-                  <span>
-                    <strong>Pix</strong>
-                    <small>Aprovação imediata</small>
-                  </span>
-                </label>
-                <label>
-                  <input type="radio" name="payment" />
-                  <span>
-                    <strong>Cartão na entrega</strong>
-                    <small>Crédito ou débito</small>
-                  </span>
-                </label>
-              </div>
-            </>
-          )}
-          {step === 4 && (
-            <>
-              <Heading as={3}>Tudo certo para pedir?</Heading>
+              <Heading as={3}>Confira seu pedido</Heading>
               <div className="review-card">
                 <div>
-                  <span>Contato</span>
-                  <strong>Marina Alves • (11) 99999-1234</strong>
+                  <span>Consumo</span>
+                  <strong>Mesa {tableNumber}</strong>
                 </div>
                 <button onClick={() => setStep(1)}>Editar</button>
               </div>
               <div className="review-card">
                 <div>
-                  <span>Entrega</span>
-                  <strong>Av. Paulista, 123 • Bela Vista</strong>
-                  <small>Previsão: 30–45 minutos</small>
+                  <span>Pagamento</span>
+                  <strong>Forma escolhida no tablet</strong>
                 </div>
                 <button onClick={() => setStep(2)}>Editar</button>
               </div>
-              <div className="review-card">
-                <div>
-                  <span>Pagamento</span>
-                  <strong>Pix</strong>
+              {grouped.map((item) => (
+                <div className="review-card" key={item.id}>
+                  <div>
+                    <span>{item.quantity} × {item.name}</span>
+                    <strong>{money(item.price * item.quantity)}</strong>
+                  </div>
                 </div>
-                <button onClick={() => setStep(3)}>Editar</button>
-              </div>
+              ))}
             </>
           )}
           <div className="form-action">
             <Button
               onClick={() =>
-                step < 4 ? setStep(step + 1) : navigate("success")
+                step < 3 ? setStep(step + 1) : navigate("success")
               }
               icon="arrow"
             >
-              {step === 4 ? "Confirmar pedido" : "Continuar"}
+              {step === 3 ? "Enviar pedido à cozinha" : "Continuar"}
             </Button>
           </div>
         </section>
         <aside className="mini-summary">
-          <span>Pedido #prévia</span>
-          <div className="mini-product">
-            <img src={products[0].image} alt="" />
-            <div>
-              <strong>2× Pastel da Casa</strong>
-              <small>Tradicional</small>
+          <span>Mesa {tableNumber}</span>
+          {grouped.map((item) => (
+            <div className="mini-product" key={item.id}>
+              <img src={item.image} alt="" />
+              <div>
+                <strong>{item.quantity}× {item.name}</strong>
+                <small>Consumo na pastelaria</small>
+              </div>
+              <b>{money(item.price * item.quantity)}</b>
             </div>
-            <b>{money(total - 2)}</b>
-          </div>
+          ))}
           <hr />
           <div>
             <span>Total</span>
             <strong>{money(total)}</strong>
           </div>
           <small>
-            <Icon name="clock" /> Entrega estimada em 30–45 min
+            <Icon name="clock" /> Preparado na hora e servido à mesa
           </small>
         </aside>
       </div>
@@ -949,9 +909,11 @@ function Checkout({
 function Success({
   navigate,
   total,
+  tableNumber,
 }: {
   navigate: (p: Page) => void
   total: number
+  tableNumber: string
 }) {
   return (
     <main className="success-page shell">
@@ -967,8 +929,8 @@ function Success({
         seu pedido.
       </Heading>
       <p>
-        Agora é com a gente. Vamos preparar tudo fresquinho e avisar cada
-        novidade.
+        Agora é com a gente. Vamos preparar tudo fresquinho e levar até a sua
+        mesa.
       </p>
       <div className="success-card">
         <div>
@@ -976,8 +938,8 @@ function Success({
           <strong>#PM-1048</strong>
         </div>
         <div>
-          <span>Previsão de entrega</span>
-          <strong>Hoje, 19:40–19:55</strong>
+          <span>Mesa</span>
+          <strong>{tableNumber}</strong>
         </div>
         <div>
           <span>Total</span>
@@ -985,7 +947,7 @@ function Success({
         </div>
       </div>
       <Button onClick={() => navigate("tracking")} icon="arrow">
-        Acompanhar pedido
+        Ver status do pedido
       </Button>
       <button className="text-link" onClick={() => navigate("home")}>
         Voltar ao início
@@ -994,12 +956,12 @@ function Success({
   )
 }
 
-function Tracking({ navigate }: { navigate: (p: Page) => void }) {
+function Tracking({ navigate, tableNumber }: { navigate: (p: Page) => void; tableNumber: string }) {
   const steps = [
     ["Pedido recebido", "19:04"],
     ["Em preparação", "19:08"],
-    ["Pronto", "Previsão 19:32"],
-    ["Saiu para entrega", "Aguardando"],
+    ["Pronto", "Aguardando"],
+    ["Servido na mesa", "Aguardando"],
     ["Finalizado", "Aguardando"],
   ]
   return (
@@ -1012,13 +974,12 @@ function Tracking({ navigate }: { navigate: (p: Page) => void }) {
           <i /> Pedido #PM-1048
         </span>
         <Heading as={1}>
-          Seu pedido está
+          Acompanhe seu pedido
           <br />
-          em preparação.
+          até a mesa.
         </Heading>
         <p>
-          Estamos caprichando em cada detalhe. A previsão de chegada é entre{" "}
-          <strong>19:40 e 19:55.</strong>
+          Estamos preparando tudo fresquinho para servir na <strong>mesa {tableNumber}.</strong>
         </p>
       </div>
       <div className="tracking-layout">
@@ -1037,13 +998,13 @@ function Tracking({ navigate }: { navigate: (p: Page) => void }) {
           ))}
         </section>
         <aside className="delivery-card">
-          <span>Entrega em</span>
-          <Heading as={2}>30–45 min</Heading>
+          <span>Consumo na pastelaria</span>
+          <Heading as={2}>Mesa {tableNumber}</Heading>
           <div className="map-art">
             <Icon name="location" size={32} />
           </div>
-          <strong>Av. Paulista, 123</strong>
-          <small>Bela Vista • São Paulo</small>
+          <strong>Seu pedido está sendo preparado</strong>
+          <small>A equipe leva até a sua mesa quando estiver pronto.</small>
           <hr />
           <button>
             Precisa de ajuda? <Icon name="arrow" />
@@ -1215,7 +1176,7 @@ function Admin({ navigate }: { navigate: (p: Page) => void }) {
                   <span className="status green">3</span>
                   <div>
                     <strong>Prontos</strong>
-                    <small>Aguardando retirada</small>
+                    <small>Aguardando servir</small>
                   </div>
                 </div>
                 <div className="status-count">
@@ -1262,8 +1223,8 @@ function Admin({ navigate }: { navigate: (p: Page) => void }) {
             <div className="order-detail-head">
               <div>
                 <span>Pedido #1048</span>
-                <Heading as={2}>Marina Alves</Heading>
-                <small>Recebido hoje às 19:04 • Entrega</small>
+                <Heading as={2}>Mesa 08</Heading>
+                <small>Recebido hoje às 19:04 • Consumo no salão</small>
               </div>
               <label>
                 Status do pedido
@@ -1274,7 +1235,7 @@ function Admin({ navigate }: { navigate: (p: Page) => void }) {
                   <option>Novo</option>
                   <option>Em preparação</option>
                   <option>Pronto</option>
-                  <option>Saiu para entrega</option>
+                  <option>Servido na mesa</option>
                   <option>Finalizado</option>
                 </select>
               </label>
@@ -1293,23 +1254,23 @@ function Admin({ navigate }: { navigate: (p: Page) => void }) {
                 <div className="detail-total">
                   <span>Subtotal</span>
                   <b>R$ 33,80</b>
-                  <span>Entrega</span>
-                  <b>R$ 5,00</b>
+                  <span>Mesa</span>
+                  <b>08</b>
                   <strong>Total</strong>
-                  <strong>R$ 38,80</strong>
+                  <strong>R$ 33,80</strong>
                 </div>
               </div>
               <aside>
-                <Heading as={3}>Entrega e contato</Heading>
+                <Heading as={3}>Atendimento da mesa</Heading>
                 <div className="contact-block">
-                  <span>Cliente</span>
+                  <span>Identificação</span>
                   <strong>Marina Alves</strong>
                   <small>(11) 99999-1234</small>
                 </div>
                 <div className="contact-block">
-                  <span>Endereço</span>
-                  <strong>Av. Paulista, 123</strong>
-                  <small>Bela Vista • São Paulo</small>
+                  <span>Atendimento</span>
+                  <strong>08</strong>
+                  <small>Consumo no salão</small>
                 </div>
                 <div className="contact-block">
                   <span>Pagamento</span>
@@ -1497,10 +1458,10 @@ function OrdersTable({
   onOpen?: () => void
 }) {
   const rows = [
-    ["#1048", "Marina Alves", "2 itens", "R$ 38,80", status],
-    ["#1047", "Carlos Lima", "4 itens", "R$ 72,40", "Novo"],
-    ["#1046", "Bianca Reis", "3 itens", "R$ 51,70", "Pronto"],
-    ["#1045", "João Costa", "2 itens", "R$ 32,80", "Em preparação"],
+    ["#1048", "Mesa 08", "2 itens", "R$ 33,80", status],
+    ["#1047", "Mesa 03", "4 itens", "R$ 72,40", "Novo"],
+    ["#1046", "Mesa 06", "3 itens", "R$ 51,70", "Pronto"],
+    ["#1045", "Mesa 02", "2 itens", "R$ 32,80", "Em preparação"],
   ]
   return (
     <div className="orders-table">
@@ -1542,10 +1503,10 @@ function Footer({ navigate }: { navigate: (p: Page) => void }) {
     <footer>
       <div className="shell footer-inner">
         <Logo />
-        <p>Pastel feito com carinho, pedido sem complicação.</p>
+        <p>Pastel feito na hora e servido na sua mesa.</p>
         <nav>
           <button onClick={() => navigate("menu")}>Cardápio</button>
-          <button onClick={() => navigate("tracking")}>Meus pedidos</button>
+          <button onClick={() => navigate("tracking")}>Acompanhar pedido</button>
           <button onClick={() => navigate("admin")}>Área da loja</button>
         </nav>
         <small>© 2025 Pastry Menu</small>
@@ -1556,8 +1517,9 @@ function Footer({ navigate }: { navigate: (p: Page) => void }) {
 
 export default function App() {
   const [page, setPage] = useState<Page>("home")
-  const [cart, setCart] = useState<Product[]>([products[0], products[1]])
+  const [cart, setCart] = useState<Product[]>([])
   const [toast, setToast] = useState("")
+  const tableNumber = new URLSearchParams(window.location.search).get("mesa") || "08"
   const navigate = (target: Page) => {
     setPage(target)
     window.scrollTo({ top: 0, behavior: "smooth" })
@@ -1573,7 +1535,7 @@ export default function App() {
       return index < 0 ? current : current.filter((_, i) => i !== index)
     })
   const total = useMemo(
-    () => cart.reduce((sum, p) => sum + p.price, 0) + 2,
+    () => cart.reduce((sum, p) => sum + p.price, 0),
     [cart],
   )
   const isAdmin = page === "admin"
@@ -1582,15 +1544,15 @@ export default function App() {
       {!isAdmin && (
         <Header page={page} navigate={navigate} cartCount={cart.length} />
       )}
-      {page === "home" && <Home navigate={navigate} add={add} />}
+      {page === "home" && <Home navigate={navigate} add={add} tableNumber={tableNumber} />}
       {page === "menu" && <MenuPage navigate={navigate} add={add} />}
       {page === "product" && <ProductPage navigate={navigate} add={add} />}
       {page === "cart" && (
         <CartPage navigate={navigate} cart={cart} remove={remove} />
       )}
-      {page === "checkout" && <Checkout navigate={navigate} total={total} />}
-      {page === "success" && <Success navigate={navigate} total={total} />}
-      {page === "tracking" && <Tracking navigate={navigate} />}
+      {page === "checkout" && <Checkout navigate={navigate} total={total} cart={cart} tableNumber={tableNumber} />}
+      {page === "success" && <Success navigate={navigate} total={total} tableNumber={tableNumber} />}
+      {page === "tracking" && <Tracking navigate={navigate} tableNumber={tableNumber} />}
       {page === "admin" && <Admin navigate={navigate} />}
       {!isAdmin && page !== "success" && <Footer navigate={navigate} />}
       {toast && (
