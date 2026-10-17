@@ -51,29 +51,27 @@ O projeto tem como princípios a praticidade, a usabilidade e a eficiência oper
 
 ## 🏗️ Estrutura do Projeto
 
-```text
 Pastry-menu/
 ├── Backend/
-│   ├── package.json
-│   └── package-lock.json
+│ ├── package.json
+│ └── package-lock.json
 │
 ├── Frontend/
-│   ├── src/
-│   │   ├── App.tsx
-│   │   ├── index.css
-│   │   ├── main.tsx
-│   │   └── vite-env.d.ts
-│   ├── index.html
-│   ├── package.json
-│   ├── package-lock.json
-│   ├── tsconfig.json
-│   ├── tsconfig.app.json
-│   ├── tsconfig.node.json
-│   └── vite.config.ts
+│ ├── src/
+│ │ ├── App.tsx
+│ │ ├── index.css
+│ │ ├── main.tsx
+│ │ └── vite-env.d.ts
+│ ├── index.html
+│ ├── package.json
+│ ├── package-lock.json
+│ ├── tsconfig.json
+│ ├── tsconfig.app.json
+│ ├── tsconfig.node.json
+│ └── vite.config.ts
 │
 ├── .gitignore
 └── README.md
-```
 
 _Estrutura baseada nos arquivos identificados durante a análise do repositório._
 
@@ -87,27 +85,19 @@ _Estrutura baseada nos arquivos identificados durante a análise do repositório
 
 ### 1. Clonar o repositório
 
-```bash
 git clone https://github.com/cardoso0411/Pastry-menu.git
-```
 
 ### 2. Acessar a pasta do projeto
 
-```bash
 cd Pastry-menu/Frontend
-```
 
 ### 3. Instalar as dependências
 
-```bash
 npm install
-```
 
 ### 4. Iniciar o ambiente de desenvolvimento
 
-```bash
 npm run dev
-```
 
 O Vite exibirá no terminal o endereço local para acessar a aplicação.
 
@@ -154,6 +144,13 @@ As contribuições devem priorizar a organização do código, a clareza das alt
 ## 📄 Licença
 
 A licença do projeto ainda deverá ser definida pelos responsáveis. Até sua publicação, não se deve presumir autorização para redistribuição ou utilização do código fora das permissões legais aplicáveis.
+
+## Desenvolvedores
+
+- Bruno Cardoso
+- Wilciano Nascimento
+- Victor Hernandez
+- Gustavo Oliveira
 
 ---
 
