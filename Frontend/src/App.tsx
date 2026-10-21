@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { apiErrorMessage, createOrder, getCatalog, getOrderStatus, type CreatedOrder, type OrderStatus } from "./api"
 
 type Page = "home" | "menu" | "product" | "cart" | "checkout" | "success" | "tracking" | "admin"
+type PaymentPreference = "cashier" | "card_terminal"
 
 type Product = {
   id: number
@@ -11,6 +13,8 @@ type Product = {
   image: string
   badge?: string
 }
+type CartItem = Product & { note?: string }
+type Category = { id: number; name: string; description: string }
 
 const photos = {
   hero: "https://images.unsplash.com/photo-1543738066-49621e5b1f87?auto=format&fit=crop&w=1400&q=86",
@@ -24,46 +28,30 @@ const photos = {
     "https://images.unsplash.com/photo-1677370261616-48751f23f8a2?auto=format&fit=crop&w=900&q=84",
 }
 
-const products: Product[] = [
-  {
-    id: 1,
-    name: "Pastel da Casa",
-    description: "Carne temperada, queijo meia cura e azeitonas.",
-    price: 16.9,
-    category: "Especiais",
-    image: photos.pastel,
-    badge: "Mais pedido",
-  },
-  {
-    id: 2,
-    name: "Carne com Queijo",
-    description: "Carne moída artesanal e muçarela derretida.",
-    price: 14.9,
-    category: "Clássicos",
-    image: photos.plate,
-  },
-  {
-    id: 3,
-    name: "Palmito Cremoso",
-    description: "Palmito, requeijão cremoso e ervas frescas.",
-    price: 15.9,
-    category: "Vegetarianos",
-    image: photos.snack,
-    badge: "Vegetariano",
-  },
-  {
-    id: 4,
-    name: "Romeu & Julieta",
-    description: "Goiabada cascão com queijo, crocante por fora.",
-    price: 12.9,
-    category: "Doces",
-    image: photos.sweet,
-    badge: "Novo",
-  },
-]
-
 const money = (value: number) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+
+const phoneDigits = (value: string) => value.replace(/\D/g, "").slice(0, 11)
+const validMobilePhone = (value: string) => /^[1-9]{2}9\d{8}$/.test(value)
+const formatPhone = (value: string) => {
+  const digits = phoneDigits(value)
+  if (digits.length <= 2) return digits
+  if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
+}
+const maskedPhone = (value: string) => `(**) *****-${phoneDigits(value).slice(-4)}`
+const paymentLabel = (preference: PaymentPreference) =>
+  preference === "cashier" ? "Pagar no caixa" : "Solicitar maquininha à equipe"
+const groupCart = (cart: CartItem[]) => {
+  const groups = new Map<string, CartItem & { quantity: number }>()
+  for (const item of cart) {
+    const key = `${item.id}:${item.note || ""}`
+    const existing = groups.get(key)
+    if (existing) existing.quantity += 1
+    else groups.set(key, { ...item, quantity: 1 })
+  }
+  return [...groups.values()]
+}
 
 function Icon({ name, size = 20 }: { name: string; size?: number }) {
   const paths: Record<string, React.ReactNode> = {
@@ -362,11 +350,15 @@ function ProductCard({
 function Home({
   navigate,
   add,
-  tableNumber,
+  products,
+  categories,
+  openProduct,
 }: {
   navigate: (p: Page) => void
   add: (product: Product) => void
-  tableNumber: string
+  products: Product[]
+  categories: Category[]
+  openProduct: (product: Product) => void
 }) {
   return (
     <main>
@@ -381,15 +373,15 @@ function Home({
             <em>Irresistível</em> por dentro.
           </Heading>
           <p>
-            Escolha seus favoritos pelo tablet da mesa. A gente prepara tudo
-            na hora e leva até você.
+            Escolha seus favoritos no cardápio digital, informe seu celular
+            e acompanhe o preparo do pedido.
           </p>
           <div className="hero-actions">
             <Button onClick={() => navigate("menu")} icon="arrow">
               Ver cardápio
             </Button>
             <span>
-              <Icon name="location" /> Atendimento na mesa {tableNumber}
+              <Icon name="clock" /> Pedido presencial, feito na hora
             </span>
           </div>
         </div>
@@ -399,15 +391,6 @@ function Home({
             src={photos.hero}
             alt="Pastéis crocantes servidos em uma panela"
           />
-          <div className="rating-card">
-            <span>
-              <Icon name="star" />
-            </span>
-            <div>
-              <strong>4,9</strong>
-              <small>+2 mil avaliações</small>
-            </div>
-          </div>
           <div className="fresh-note">
             feito
             <br />
@@ -418,14 +401,9 @@ function Home({
 
       <section className="category-strip">
         <div className="shell category-row">
-          {[
-            ["Clássicos", "Carne, queijo e mais"],
-            ["Especiais", "Combinações da casa"],
-            ["Vegetarianos", "Leves e saborosos"],
-            ["Doces", "Para fechar bem"],
-          ].map(([name, text], i) => (
+          {categories.map(({ id, name, description }, i) => (
             <button
-              key={name}
+              key={id}
               className="category-item"
               onClick={() => navigate("menu")}
             >
@@ -434,7 +412,7 @@ function Home({
               </span>
               <span>
                 <strong>{name}</strong>
-                <small>{text}</small>
+                <small>{description}</small>
               </span>
               <Icon name="arrow" />
             </button>
@@ -445,10 +423,8 @@ function Home({
       <section className="featured shell">
         <div className="section-heading">
           <div>
-            <span className="eyebrow">
-              <i /> Os queridinhos
-            </span>
-            <Heading>Mais pedidos da casa</Heading>
+            <span className="eyebrow"><i /> Nosso cardápio</span>
+            <Heading>Escolha seu favorito</Heading>
           </div>
           <button className="text-link" onClick={() => navigate("menu")}>
             Ver todos <Icon name="arrow" />
@@ -459,7 +435,7 @@ function Home({
             <ProductCard
               key={product.id}
               product={product}
-              open={() => navigate("product")}
+              open={() => openProduct(product)}
               add={() => add(product)}
             />
           ))}
@@ -468,18 +444,14 @@ function Home({
 
       <section className="promo shell">
         <div>
-          <span className="promo-kicker">Oferta da semana</span>
+          <span className="promo-kicker">Feito na hora</span>
           <Heading>
-            Dois pastéis +<br />
-            caldo de cana
+            Escolha seu pastel<br />
+            favorito
           </Heading>
-          <p>A dupla perfeita para matar a fome.</p>
-          <div className="promo-price">
-            <small>por apenas</small>
-            <strong>R$ 29,90</strong>
-          </div>
+          <p>Confira os sabores disponíveis no cardápio.</p>
           <Button variant="dark" onClick={() => navigate("menu")}>
-            Quero essa oferta
+            Ver cardápio
           </Button>
         </div>
         <img src={photos.plate} alt="Pastéis dourados da oferta" />
@@ -497,14 +469,14 @@ function Home({
           <Icon name="location" />
           <span>
             <strong>Peça pelo tablet</strong>
-            <small>Sem fila, direto da sua mesa</small>
+            <small>Faça seu pedido no cardápio digital</small>
           </span>
         </div>
         <div>
           <Icon name="star" />
           <span>
-            <strong>Servido na sua mesa</strong>
-            <small>Preparado na hora, com carinho</small>
+            <strong>Identificado pelo celular</strong>
+            <small>Acompanhe o preparo sem confusão</small>
           </span>
         </div>
       </section>
@@ -513,21 +485,19 @@ function Home({
 }
 
 function MenuPage({
-  navigate,
   add,
+  products,
+  categories,
+  openProduct,
 }: {
-  navigate: (p: Page) => void
   add: (product: Product) => void
+  products: Product[]
+  categories: Category[]
+  openProduct: (product: Product) => void
 }) {
   const [category, setCategory] = useState("Todos")
   const [query, setQuery] = useState("")
-  const categories = [
-    "Todos",
-    "Clássicos",
-    "Especiais",
-    "Vegetarianos",
-    "Doces",
-  ]
+  const categoryNames = ["Todos", ...categories.map((item) => item.name)]
   const visible = products.filter(
     (p) =>
       (category === "Todos" || p.category === category) &&
@@ -552,7 +522,7 @@ function MenuPage({
           />
         </label>
         <div className="chips">
-          {categories.map((item) => (
+          {categoryNames.map((item) => (
             <button
               key={item}
               className={category === item ? "active" : ""}
@@ -578,7 +548,7 @@ function MenuPage({
             <ProductCard
               key={product.id}
               product={product}
-              open={() => navigate("product")}
+              open={() => openProduct(product)}
               add={() => add(product)}
             />
           ))}
@@ -597,13 +567,14 @@ function MenuPage({
 function ProductPage({
   navigate,
   add,
+  product,
 }: {
   navigate: (p: Page) => void
-  add: (product: Product) => void
+  add: (product: Product, note?: string) => void
+  product: Product
 }) {
-  const product = products[0]
   const [qty, setQty] = useState(1)
-  const [size, setSize] = useState("Tradicional")
+  const [note, setNote] = useState("")
   return (
     <main className="product-page shell">
       <button className="back-link" onClick={() => navigate("menu")}>
@@ -612,55 +583,21 @@ function ProductPage({
       <div className="product-detail">
         <div className="detail-image">
           <img src={product.image} alt={product.name} />
-          <span className="badge">Mais pedido</span>
+          {product.badge && <span className="badge">{product.badge}</span>}
         </div>
         <div className="detail-copy">
           <span className="eyebrow">
-            <i /> Especial da casa
+            <i /> {product.category || "Cardápio"}
           </span>
           <Heading as={1}>{product.name}</Heading>
-          <div className="detail-rating">
-            <Icon name="star" />
-            <strong>4,9</strong>
-            <span>(328 avaliações)</span>
-          </div>
-          <p className="detail-description">
-            Nossa receita mais amada: carne moída bem temperada, queijo meia
-            cura derretido, azeitonas e um toque de cheiro-verde.
-          </p>
-          <div className="ingredients">
-            <strong>Ingredientes</strong>
-            <p>
-              Carne bovina, queijo meia cura, azeitonas, cebola, cheiro-verde e
-              temperos da casa.
-            </p>
-          </div>
-          <fieldset className="options">
-            <legend>
-              Escolha o tamanho <small>Obrigatório</small>
-            </legend>
-            {["Tradicional", "Grande (+ R$ 4,00)"].map((item) => (
-              <label key={item} className={size === item ? "selected" : ""}>
-                <input
-                  type="radio"
-                  name="size"
-                  checked={size === item}
-                  onChange={() => setSize(item)}
-                />
-                <span>{item}</span>
-                <b>
-                  {item === "Tradicional"
-                    ? money(product.price)
-                    : money(product.price + 4)}
-                </b>
-              </label>
-            ))}
-          </fieldset>
+          <p className="detail-description">{product.description}</p>
           <label className="note-field">
             <strong>Alguma observação?</strong>
             <textarea
               placeholder="Ex.: sem azeitonas, bem passado..."
               maxLength={140}
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
             />
           </label>
           <div className="detail-action">
@@ -669,13 +606,13 @@ function ProductPage({
                 <Icon name="minus" />
               </button>
               <strong>{qty}</strong>
-              <button onClick={() => setQty(qty + 1)}>
+              <button onClick={() => setQty(Math.min(99, qty + 1))}>
                 <Icon name="plus" />
               </button>
             </div>
             <Button
               onClick={() => {
-                for (let i = 0; i < qty; i++) add(product)
+                for (let i = 0; i < qty; i++) add(product, note.trim())
                 navigate("cart")
               }}
             >
@@ -694,13 +631,11 @@ function CartPage({
   remove,
 }: {
   navigate: (p: Page) => void
-  cart: Product[]
-  remove: (id: number) => void
+  cart: CartItem[]
+  remove: (id: number, note?: string) => void
 }) {
   const subtotal = cart.reduce((sum, p) => sum + p.price, 0)
-  const grouped = products
-    .map((p) => ({ ...p, qty: cart.filter((i) => i.id === p.id).length }))
-    .filter((p) => p.qty)
+  const grouped = groupCart(cart)
   return (
     <main className="cart-page shell">
       <button className="back-link" onClick={() => navigate("menu")}>
@@ -718,21 +653,17 @@ function CartPage({
         <div className="cart-layout">
           <div className="cart-list">
             {grouped.map((item) => (
-              <article className="cart-item" key={item.id}>
+              <article className="cart-item" key={`${item.id}:${item.note || ""}`}>
                 <img src={item.image} alt="" />
                 <div>
                   <strong>{item.name}</strong>
-                  <small>Tradicional</small>
-                  <button onClick={() => remove(item.id)}>Remover</button>
+                  {item.note && <small>{item.note}</small>}
+                  <button onClick={() => remove(item.id, item.note)}>Remover</button>
                 </div>
-                <span>{item.qty} un.</span>
-                <b>{money(item.price * item.qty)}</b>
+                <span>{item.quantity} un.</span>
+                <b>{money(item.price * item.quantity)}</b>
               </article>
             ))}
-            <label className="note-field">
-              <strong>Observação do pedido</strong>
-              <textarea placeholder="Precisa de algo? Escreva aqui." />
-            </label>
           </div>
           <aside className="order-summary">
             <Heading as={3}>Resumo do pedido</Heading>
@@ -758,23 +689,40 @@ function CartPage({
 
 function Checkout({
   navigate,
+  submitOrder,
   total,
   cart,
-  tableNumber,
+  customerPhone,
+  setCustomerPhone,
+  paymentPreference,
+  setPaymentPreference,
+  submitting,
+  submitError,
 }: {
   navigate: (p: Page) => void
+  submitOrder: () => Promise<void>
   total: number
-  cart: Product[]
-  tableNumber: string
+  cart: CartItem[]
+  customerPhone: string
+  setCustomerPhone: (phone: string) => void
+  paymentPreference: PaymentPreference
+  setPaymentPreference: (preference: PaymentPreference) => void
+  submitting: boolean
+  submitError: string
 }) {
   const [step, setStep] = useState(1)
-  const titles = ["Mesa", "Pagamento", "Revisão"]
-  const grouped = products
-    .map((product) => ({
-      ...product,
-      quantity: cart.filter((item) => item.id === product.id).length,
-    }))
-    .filter((product) => product.quantity > 0)
+  const [phoneError, setPhoneError] = useState(false)
+  const titles = ["Identificação", "Pagamento", "Revisão"]
+  const continueCheckout = () => {
+    if (submitting) return
+    if (step === 1 && !validMobilePhone(customerPhone)) {
+      setPhoneError(true)
+      return
+    }
+    if (step < 3) setStep(step + 1)
+    else submitOrder()
+  }
+  const grouped = groupCart(cart)
   return (
     <main className="checkout-page shell">
       <button
@@ -804,39 +752,59 @@ function Checkout({
         <section className="checkout-form">
           {step === 1 && (
             <>
-              <Heading as={3}>Este pedido será servido na sua mesa</Heading>
-              <div className="review-card">
-                <div>
-                  <span>Mesa</span>
-                  <strong>{tableNumber}</strong>
-                  <small>Confira se o número corresponde à sua mesa.</small>
-                </div>
+              <Heading as={3}>Qual é o seu número de celular?</Heading>
+              <div className="field-grid">
+                <label className="wide">
+                  Celular com DDD
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    placeholder="(11) 99999-9999"
+                    value={formatPhone(customerPhone)}
+                    onChange={(event) => {
+                      setCustomerPhone(phoneDigits(event.target.value))
+                      setPhoneError(false)
+                    }}
+                    aria-invalid={phoneError}
+                    aria-describedby={phoneError ? "phone-error" : undefined}
+                  />
+                </label>
               </div>
+              {phoneError && (
+                <p className="field-error" id="phone-error" role="alert">
+                  Informe um celular válido com DDD e 11 dígitos.
+                </p>
+              )}
+              <p>Usaremos esse número para identificar e localizar seu pedido.</p>
             </>
           )}
           {step === 2 && (
             <>
               <Heading as={3}>Como prefere pagar?</Heading>
               <div className="choice-list compact">
-                <label className="selected">
-                  <input type="radio" name="payment" defaultChecked />
+                <label className={paymentPreference === "cashier" ? "selected" : ""}>
+                  <input
+                    type="radio"
+                    name="payment"
+                    checked={paymentPreference === "cashier"}
+                    onChange={() => setPaymentPreference("cashier")}
+                  />
                   <span>
-                    <strong>No caixa</strong>
-                    <small>Ao terminar sua refeição</small>
+                    <strong>Pagar no caixa</strong>
+                    <small>Informe seu celular ou número do pedido à equipe</small>
                   </span>
                 </label>
-                <label>
-                  <input type="radio" name="payment" />
+                <label className={paymentPreference === "card_terminal" ? "selected" : ""}>
+                  <input
+                    type="radio"
+                    name="payment"
+                    checked={paymentPreference === "card_terminal"}
+                    onChange={() => setPaymentPreference("card_terminal")}
+                  />
                   <span>
-                    <strong>Pix pelo tablet</strong>
-                    <small>Faça o pagamento pelo celular</small>
-                  </span>
-                </label>
-                <label>
-                  <input type="radio" name="payment" />
-                  <span>
-                    <strong>Cartão na mesa</strong>
-                    <small>Solicite a maquininha à equipe</small>
+                    <strong>Solicitar maquininha à equipe</strong>
+                    <small>A equipe chamará pelo seu pedido para o pagamento</small>
                   </span>
                 </label>
               </div>
@@ -847,43 +815,44 @@ function Checkout({
               <Heading as={3}>Confira seu pedido</Heading>
               <div className="review-card">
                 <div>
-                  <span>Consumo</span>
-                  <strong>Mesa {tableNumber}</strong>
+                  <span>Celular para identificação</span>
+                  <strong>{formatPhone(customerPhone)}</strong>
                 </div>
                 <button onClick={() => setStep(1)}>Editar</button>
               </div>
               <div className="review-card">
                 <div>
                   <span>Pagamento</span>
-                  <strong>Forma escolhida no tablet</strong>
+                  <strong>{paymentLabel(paymentPreference)}</strong>
                 </div>
                 <button onClick={() => setStep(2)}>Editar</button>
               </div>
               {grouped.map((item) => (
-                <div className="review-card" key={item.id}>
+                <div className="review-card" key={`${item.id}:${item.note || ""}`}>
                   <div>
                     <span>{item.quantity} × {item.name}</span>
                     <strong>{money(item.price * item.quantity)}</strong>
+                    {item.note && <small>{item.note}</small>}
                   </div>
                 </div>
               ))}
             </>
           )}
           <div className="form-action">
+            {submitError && <p className="field-error" role="alert">{submitError}</p>}
             <Button
-              onClick={() =>
-                step < 3 ? setStep(step + 1) : navigate("success")
-              }
+              onClick={continueCheckout}
               icon="arrow"
+              disabled={submitting || (step === 3 && !cart.length)}
             >
-              {step === 3 ? "Enviar pedido à cozinha" : "Continuar"}
+              {submitting ? "Enviando pedido..." : step === 3 ? "Enviar pedido à cozinha" : "Continuar"}
             </Button>
           </div>
         </section>
         <aside className="mini-summary">
-          <span>Mesa {tableNumber}</span>
+          <span>Pedido presencial</span>
           {grouped.map((item) => (
-            <div className="mini-product" key={item.id}>
+            <div className="mini-product" key={`${item.id}:${item.note || ""}`}>
               <img src={item.image} alt="" />
               <div>
                 <strong>{item.quantity}× {item.name}</strong>
@@ -898,7 +867,7 @@ function Checkout({
             <strong>{money(total)}</strong>
           </div>
           <small>
-            <Icon name="clock" /> Preparado na hora e servido à mesa
+            <Icon name="clock" /> Preparado na hora para você
           </small>
         </aside>
       </div>
@@ -909,11 +878,15 @@ function Checkout({
 function Success({
   navigate,
   total,
-  tableNumber,
+  customerPhone,
+  paymentPreference,
+  orderNumber,
 }: {
   navigate: (p: Page) => void
   total: number
-  tableNumber: string
+  customerPhone: string
+  paymentPreference: PaymentPreference
+  orderNumber: number
 }) {
   return (
     <main className="success-page shell">
@@ -929,17 +902,17 @@ function Success({
         seu pedido.
       </Heading>
       <p>
-        Agora é com a gente. Vamos preparar tudo fresquinho e levar até a sua
-        mesa.
+        Vamos preparar tudo fresquinho. Acompanhe o pedido pelo celular informado.
       </p>
       <div className="success-card">
+        <div><span>Número do pedido</span><strong>#{orderNumber}</strong></div>
         <div>
-          <span>Número do pedido</span>
-          <strong>#PM-1048</strong>
+          <span>Identificação</span>
+          <strong>{maskedPhone(customerPhone)}</strong>
         </div>
         <div>
-          <span>Mesa</span>
-          <strong>{tableNumber}</strong>
+          <span>Pagamento</span>
+          <strong>{paymentPreference === "cashier" ? "No caixa" : "Maquininha com a equipe"}</strong>
         </div>
         <div>
           <span>Total</span>
@@ -956,14 +929,41 @@ function Success({
   )
 }
 
-function Tracking({ navigate, tableNumber }: { navigate: (p: Page) => void; tableNumber: string }) {
-  const steps = [
-    ["Pedido recebido", "19:04"],
-    ["Em preparação", "19:08"],
-    ["Pronto", "Aguardando"],
-    ["Servido na mesa", "Aguardando"],
-    ["Finalizado", "Aguardando"],
+function Tracking({
+  navigate,
+  customerPhone,
+  paymentPreference,
+  order,
+  status,
+  statusError,
+}: {
+  navigate: (p: Page) => void
+  customerPhone: string
+  paymentPreference: PaymentPreference
+  order: CreatedOrder | null
+  status: OrderStatus | null
+  statusError: string
+}) {
+  if (!order) {
+    return (
+      <main className="tracking-page shell">
+        <div className="empty-state cart-empty">
+          <Icon name="orders" size={36} />
+          <Heading as={2}>Nenhum pedido em andamento</Heading>
+          <p>Escolha seus pastéis no cardápio para começar.</p>
+          <Button onClick={() => navigate("menu")}>Ver cardápio</Button>
+        </div>
+      </main>
+    )
+  }
+  const steps: [string, string, string][] = [
+    ["recebido", "Pedido recebido", "Confirmado no cardápio"],
+    ["em_preparo", "Em preparação", "Aguardando"],
+    ["pronto", "Pronto", "Aguardando"],
+    ["cliente_avisado", "Cliente avisado", "Aguardando"],
+    ["finalizado", "Finalizado", "Aguardando"],
   ]
+  const currentStep = steps.findIndex(([key]) => key === (status?.situacao || order.situacao))
   return (
     <main className="tracking-page shell">
       <button className="back-link" onClick={() => navigate("home")}>
@@ -971,40 +971,46 @@ function Tracking({ navigate, tableNumber }: { navigate: (p: Page) => void; tabl
       </button>
       <div className="tracking-intro">
         <span className="eyebrow">
-          <i /> Pedido #PM-1048
+          <i /> Acompanhamento do pedido
         </span>
         <Heading as={1}>
           Acompanhe seu pedido
           <br />
-          até a mesa.
+          até ficar pronto.
         </Heading>
         <p>
-          Estamos preparando tudo fresquinho para servir na <strong>mesa {tableNumber}.</strong>
+          Pedido <strong>#{order.numero_pedido}</strong> · Identificação pelo celular <strong>{maskedPhone(customerPhone)}.</strong>
         </p>
+        {statusError && <p className="field-error" role="alert">{statusError}</p>}
+        {status?.situacao === "cancelado" && <p className="field-error">Este pedido foi cancelado.</p>}
       </div>
       <div className="tracking-layout">
         <section className="timeline">
-          {steps.map(([name, time], index) => (
-            <div key={name} className={index <= 1 ? "done" : ""}>
-              <span>{index < 1 ? <Icon name="check" /> : index + 1}</span>
+          {steps.map(([, name, time], index) => (
+            <div key={name} className={index <= currentStep ? "done" : ""}>
+              <span>{index <= currentStep ? <Icon name="check" /> : index + 1}</span>
               <div>
                 <strong>{name}</strong>
                 <small>{time}</small>
-                {index === 1 && (
-                  <p>Seus pastéis estão sendo preparados agora.</p>
+                {index === 0 && (
+                  <p>Seu pedido foi enviado para a equipe.</p>
                 )}
               </div>
             </div>
           ))}
         </section>
         <aside className="delivery-card">
-          <span>Consumo na pastelaria</span>
-          <Heading as={2}>Mesa {tableNumber}</Heading>
+          <span>Pagamento presencial</span>
+          <Heading as={2}>{paymentPreference === "cashier" ? "No caixa" : "Maquininha"}</Heading>
           <div className="map-art">
-            <Icon name="location" size={32} />
+            <Icon name="orders" size={32} />
           </div>
-          <strong>Seu pedido está sendo preparado</strong>
-          <small>A equipe leva até a sua mesa quando estiver pronto.</small>
+          <strong>Pedido enviado para a equipe</strong>
+          <small>
+            {paymentPreference === "cashier"
+              ? "Informe seu celular à equipe no caixa para pagar."
+              : "A equipe chamará você para pagar com a maquininha."}
+          </small>
           <hr />
           <button>
             Precisa de ajuda? <Icon name="arrow" />
@@ -1015,8 +1021,8 @@ function Tracking({ navigate, tableNumber }: { navigate: (p: Page) => void; tabl
   )
 }
 
-function Admin({ navigate }: { navigate: (p: Page) => void }) {
-  const [authenticated, setAuthenticated] = useState(false)
+function Admin({ navigate, products }: { navigate: (p: Page) => void; products: Product[] }) {
+  const [authenticated] = useState(false)
   const [tab, setTab] = useState("Visão geral")
   const [status, setStatus] = useState("Em preparação")
   const [orderDetail, setOrderDetail] = useState(false)
@@ -1026,7 +1032,7 @@ function Admin({ navigate }: { navigate: (p: Page) => void }) {
     ["Pedidos", "orders"],
     ["Produtos", "box"],
     ["Categorias", "grid"],
-    ["Clientes", "user"],
+    ["Celulares", "user"],
   ]
 
   if (!authenticated) {
@@ -1045,16 +1051,16 @@ function Admin({ navigate }: { navigate: (p: Page) => void }) {
           <form
             onSubmit={(event) => {
               event.preventDefault()
-              setAuthenticated(true)
+              // O painel administrativo ainda não possui autenticação na API.
             }}
           >
             <label>
               E-mail
-              <input type="email" defaultValue="admin@pastrymenu.com.br" />
+              <input type="email" disabled />
             </label>
             <label>
               Senha
-              <input type="password" defaultValue="pastrymenu" />
+              <input type="password" disabled />
             </label>
             <div className="login-options">
               <label>
@@ -1062,9 +1068,7 @@ function Admin({ navigate }: { navigate: (p: Page) => void }) {
               </label>
               <button type="button">Esqueci minha senha</button>
             </div>
-            <Button type="submit" icon="arrow">
-              Entrar no painel
-            </Button>
+            <p>O acesso da equipe será ativado após a integração da autenticação.</p>
           </form>
           <small>Acesso exclusivo para a equipe Pastry Menu</small>
         </section>
@@ -1072,8 +1076,8 @@ function Admin({ navigate }: { navigate: (p: Page) => void }) {
           <img src={photos.hero} alt="Pastéis preparados na loja" />
           <div>
             <span>Operação de hoje</span>
-            <strong>48 pedidos</strong>
-            <small>96% entregues no prazo</small>
+            <strong>Área da equipe</strong>
+            <small>Em preparação</small>
           </div>
         </aside>
       </main>
@@ -1176,7 +1180,7 @@ function Admin({ navigate }: { navigate: (p: Page) => void }) {
                   <span className="status green">3</span>
                   <div>
                     <strong>Prontos</strong>
-                    <small>Aguardando servir</small>
+                    <small>Aguardando chamar o cliente</small>
                   </div>
                 </div>
                 <div className="status-count">
@@ -1223,7 +1227,7 @@ function Admin({ navigate }: { navigate: (p: Page) => void }) {
             <div className="order-detail-head">
               <div>
                 <span>Pedido #1048</span>
-                <Heading as={2}>Mesa 08</Heading>
+                <Heading as={2}>Celular •••• 4321</Heading>
                 <small>Recebido hoje às 19:04 • Consumo no salão</small>
               </div>
               <label>
@@ -1235,7 +1239,7 @@ function Admin({ navigate }: { navigate: (p: Page) => void }) {
                   <option>Novo</option>
                   <option>Em preparação</option>
                   <option>Pronto</option>
-                  <option>Servido na mesa</option>
+                  <option>Cliente avisado</option>
                   <option>Finalizado</option>
                 </select>
               </label>
@@ -1254,27 +1258,20 @@ function Admin({ navigate }: { navigate: (p: Page) => void }) {
                 <div className="detail-total">
                   <span>Subtotal</span>
                   <b>R$ 33,80</b>
-                  <span>Mesa</span>
-                  <b>08</b>
                   <strong>Total</strong>
                   <strong>R$ 33,80</strong>
                 </div>
               </div>
               <aside>
-                <Heading as={3}>Atendimento da mesa</Heading>
+                <Heading as={3}>Identificação e pagamento</Heading>
                 <div className="contact-block">
-                  <span>Identificação</span>
-                  <strong>Marina Alves</strong>
-                  <small>(11) 99999-1234</small>
-                </div>
-                <div className="contact-block">
-                  <span>Atendimento</span>
-                  <strong>08</strong>
-                  <small>Consumo no salão</small>
+                  <span>Celular</span>
+                  <strong>(11) 9••••-4321</strong>
+                  <small>Confirme os últimos quatro dígitos com o cliente</small>
                 </div>
                 <div className="contact-block">
                   <span>Pagamento</span>
-                  <strong>Pix • Pago</strong>
+                  <strong>No caixa • Pendente</strong>
                 </div>
               </aside>
             </div>
@@ -1406,34 +1403,34 @@ function Admin({ navigate }: { navigate: (p: Page) => void }) {
             </div>
           </section>
         )}
-        {tab === "Clientes" && (
+        {tab === "Celulares" && (
           <section className="admin-panel full-panel">
             <div className="panel-title">
               <div>
-                <Heading as={3}>Clientes</Heading>
-                <small>1.284 clientes cadastrados</small>
+                <Heading as={3}>Histórico por celular</Heading>
+                <small>Pedidos agrupados pelo número informado</small>
               </div>
               <label className="admin-search">
                 <Icon name="search" />
-                <input placeholder="Buscar cliente" />
+                <input placeholder="Buscar celular" />
               </label>
             </div>
             <div className="customers-table">
               {[
-                ["MA", "Marina Alves", "18 pedidos", "R$ 684,20", "Hoje"],
-                ["CL", "Carlos Lima", "12 pedidos", "R$ 430,80", "Ontem"],
-                ["BR", "Bianca Reis", "9 pedidos", "R$ 351,40", "24 mai"],
-                ["JC", "João Costa", "7 pedidos", "R$ 286,10", "21 mai"],
-              ].map(([initials, name, orders, spent, last]) => (
-                <article key={name}>
+                ["21", "(11) 9••••-4321", "18 pedidos", "R$ 684,20", "Hoje"],
+                ["65", "(11) 9••••-8765", "12 pedidos", "R$ 430,80", "Ontem"],
+                ["34", "(11) 9••••-1234", "9 pedidos", "R$ 351,40", "24 mai"],
+                ["78", "(11) 9••••-5678", "7 pedidos", "R$ 286,10", "21 mai"],
+              ].map(([initials, phone, orders, spent, last]) => (
+                <article key={phone}>
                   <span>{initials}</span>
                   <div>
-                    <strong>{name}</strong>
+                    <strong>{phone}</strong>
                     <small>{orders}</small>
                   </div>
                   <b>{spent}</b>
                   <small>Último pedido: {last}</small>
-                  <button aria-label={`Ver cliente ${name}`}>
+                  <button aria-label={`Ver pedidos do celular ${phone}`}>
                     <Icon name="arrow" />
                   </button>
                 </article>
@@ -1458,10 +1455,10 @@ function OrdersTable({
   onOpen?: () => void
 }) {
   const rows = [
-    ["#1048", "Mesa 08", "2 itens", "R$ 33,80", status],
-    ["#1047", "Mesa 03", "4 itens", "R$ 72,40", "Novo"],
-    ["#1046", "Mesa 06", "3 itens", "R$ 51,70", "Pronto"],
-    ["#1045", "Mesa 02", "2 itens", "R$ 32,80", "Em preparação"],
+    ["#1048", "Celular •••• 4321", "2 itens", "R$ 33,80", status],
+    ["#1047", "Celular •••• 8765", "4 itens", "R$ 72,40", "Novo"],
+    ["#1046", "Celular •••• 1234", "3 itens", "R$ 51,70", "Pronto"],
+    ["#1045", "Celular •••• 5678", "2 itens", "R$ 32,80", "Em preparação"],
   ]
   return (
     <div className="orders-table">
@@ -1478,6 +1475,7 @@ function OrdersTable({
               <option>Novo</option>
               <option>Em preparação</option>
               <option>Pronto</option>
+              <option>Cliente avisado</option>
               <option>Finalizado</option>
             </select>
           ) : (
@@ -1503,7 +1501,7 @@ function Footer({ navigate }: { navigate: (p: Page) => void }) {
     <footer>
       <div className="shell footer-inner">
         <Logo />
-        <p>Pastel feito na hora e servido na sua mesa.</p>
+        <p>Pastel feito na hora, pedido identificado pelo celular.</p>
         <nav>
           <button onClick={() => navigate("menu")}>Cardápio</button>
           <button onClick={() => navigate("tracking")}>Acompanhar pedido</button>
@@ -1517,43 +1515,157 @@ function Footer({ navigate }: { navigate: (p: Page) => void }) {
 
 export default function App() {
   const [page, setPage] = useState<Page>("home")
-  const [cart, setCart] = useState<Product[]>([])
+  const [products, setProducts] = useState<Product[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [catalogError, setCatalogError] = useState("")
+  const [catalogLoading, setCatalogLoading] = useState(true)
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [cart, setCart] = useState<CartItem[]>([])
   const [toast, setToast] = useState("")
-  const tableNumber = new URLSearchParams(window.location.search).get("mesa") || "08"
+  const [customerPhone, setCustomerPhone] = useState("")
+  const [paymentPreference, setPaymentPreference] = useState<PaymentPreference>("cashier")
+  const [createdOrder, setCreatedOrder] = useState<CreatedOrder | null>(null)
+  const [orderStatus, setOrderStatus] = useState<OrderStatus | null>(null)
+  const [statusError, setStatusError] = useState("")
+  const [submitting, setSubmitting] = useState(false)
+  const submitInFlight = useRef(false)
+  const [submitError, setSubmitError] = useState("")
+  const [submittedTotal, setSubmittedTotal] = useState(0)
+  useEffect(() => {
+    let active = true
+    getCatalog().then((catalog) => {
+      if (!active) return
+      setCategories(catalog.categorias.map((item) => ({
+        id: item.id, name: item.nome, description: item.descricao || "",
+      })))
+      setProducts(catalog.produtos.map((item) => ({
+        id: item.id, name: item.nome, description: item.descricao || "",
+        price: item.preco_base, category: item.categoria || "Outros",
+        image: item.url_imagem || photos.pastel,
+      })))
+      setCatalogError("")
+    }).catch((error) => {
+      if (active) setCatalogError(apiErrorMessage(error))
+    }).finally(() => { if (active) setCatalogLoading(false) })
+    return () => { active = false }
+  }, [])
+  useEffect(() => {
+    if (!createdOrder || page !== "tracking") return
+    let active = true
+    const refresh = () => getOrderStatus(createdOrder).then((status) => {
+      if (active) { setOrderStatus(status); setStatusError("") }
+    }).catch((error) => {
+      if (active) setStatusError(apiErrorMessage(error))
+    })
+    void refresh()
+    const interval = window.setInterval(refresh, 10000)
+    return () => { active = false; window.clearInterval(interval) }
+  }, [createdOrder, page])
   const navigate = (target: Page) => {
+    if (target === "home" && createdOrder) {
+      setCart([])
+      setCustomerPhone("")
+      setPaymentPreference("cashier")
+      setCreatedOrder(null)
+      setOrderStatus(null)
+      setSubmittedTotal(0)
+    }
     setPage(target)
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
-  const add = (product: Product) => {
-    setCart((current) => [...current, product])
+  const add = (product: Product, note?: string) => {
+    setCart((current) => [...current, { ...product, note }])
     setToast(`${product.name} adicionado ao carrinho`)
     window.setTimeout(() => setToast(""), 2400)
   }
-  const remove = (id: number) =>
+  const remove = (id: number, note?: string) =>
     setCart((current) => {
-      const index = current.findIndex((item) => item.id === id)
+      const index = current.findIndex((item) => item.id === id && item.note === note)
       return index < 0 ? current : current.filter((_, i) => i !== index)
     })
   const total = useMemo(
     () => cart.reduce((sum, p) => sum + p.price, 0),
     [cart],
   )
+  const openProduct = (product: Product) => {
+    setSelectedProduct(product)
+    navigate("product")
+  }
+  const submitOrder = async () => {
+    if (submitInFlight.current || !cart.length) return
+    submitInFlight.current = true
+    setSubmitting(true)
+    setSubmitError("")
+    try {
+      const order = await createOrder({
+        celular_cliente: customerPhone,
+        preferencia_pagamento: paymentPreference === "cashier" ? "caixa" : "maquininha",
+        itens: groupCart(cart).map((item) => ({
+          produto_id: item.id, quantidade: item.quantity, observacoes: item.note,
+        })),
+      })
+      setCreatedOrder(order)
+      setOrderStatus(null)
+      setSubmittedTotal(order.valor_total)
+      setCart([])
+      navigate("success")
+    } catch (error) {
+      setSubmitError(apiErrorMessage(error))
+    } finally {
+      submitInFlight.current = false
+      setSubmitting(false)
+    }
+  }
   const isAdmin = page === "admin"
   return (
     <>
       {!isAdmin && (
         <Header page={page} navigate={navigate} cartCount={cart.length} />
       )}
-      {page === "home" && <Home navigate={navigate} add={add} tableNumber={tableNumber} />}
-      {page === "menu" && <MenuPage navigate={navigate} add={add} />}
-      {page === "product" && <ProductPage navigate={navigate} add={add} />}
+      {catalogError && (page === "home" || page === "menu") &&
+        <p className="field-error shell" role="alert">Cardápio indisponível: {catalogError}</p>}
+      {catalogLoading && (page === "home" || page === "menu") &&
+        <p className="shell" role="status">Carregando cardápio...</p>}
+      {page === "home" && <Home navigate={navigate} add={add} products={products} categories={categories} openProduct={openProduct} />}
+      {page === "menu" && <MenuPage add={add} products={products} categories={categories} openProduct={openProduct} />}
+      {page === "product" && selectedProduct && <ProductPage key={selectedProduct.id} navigate={navigate} add={add} product={selectedProduct} />}
       {page === "cart" && (
         <CartPage navigate={navigate} cart={cart} remove={remove} />
       )}
-      {page === "checkout" && <Checkout navigate={navigate} total={total} cart={cart} tableNumber={tableNumber} />}
-      {page === "success" && <Success navigate={navigate} total={total} tableNumber={tableNumber} />}
-      {page === "tracking" && <Tracking navigate={navigate} tableNumber={tableNumber} />}
-      {page === "admin" && <Admin navigate={navigate} />}
+      {page === "checkout" && (
+        <Checkout
+          navigate={navigate}
+          submitOrder={submitOrder}
+          total={total}
+          cart={cart}
+          customerPhone={customerPhone}
+          setCustomerPhone={setCustomerPhone}
+          paymentPreference={paymentPreference}
+          setPaymentPreference={setPaymentPreference}
+          submitting={submitting}
+          submitError={submitError}
+        />
+      )}
+      {page === "success" && (
+        <Success
+          navigate={navigate}
+          total={submittedTotal}
+          customerPhone={customerPhone}
+          paymentPreference={paymentPreference}
+          orderNumber={createdOrder?.numero_pedido || 0}
+        />
+      )}
+      {page === "tracking" && (
+        <Tracking
+          navigate={navigate}
+          customerPhone={customerPhone}
+          paymentPreference={paymentPreference}
+          order={createdOrder}
+          status={orderStatus}
+          statusError={statusError}
+        />
+      )}
+      {page === "admin" && <Admin navigate={navigate} products={products} />}
       {!isAdmin && page !== "success" && <Footer navigate={navigate} />}
       {toast && (
         <div className="toast" role="status">
