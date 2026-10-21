@@ -1,6 +1,6 @@
 {
   "name": "pastry-menu",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "scripts": {
     "dev": "concurrently --kill-others --names backend,frontend \"npm:dev:backend\" \"npm:dev:frontend\"",
