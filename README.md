@@ -47,14 +47,14 @@ O projeto tem como princípios a praticidade, a usabilidade e a eficiência oper
 - **GitHub:** hospedagem e gerenciamento do código-fonte.
 - **Visual Studio Code:** edição e análise do código.
 
-> **Nota:** as tecnologias foram identificadas nos arquivos de configuração. Sua implementação e integração funcional devem ser confirmadas durante o desenvolvimento.
-
 ## 🏗️ Estrutura do Projeto
 
 Pastry-menu/
 ├── Backend/
-│ ├── package.json
-│ └── package-lock.json
+│ ├── src/
+│ ├── database/
+│ ├── backend.env.example
+│ └── package.json
 │
 ├── Frontend/
 │ ├── src/
@@ -64,24 +64,23 @@ Pastry-menu/
 │ │ └── vite-env.d.ts
 │ ├── index.html
 │ ├── package.json
-│ ├── package-lock.json
 │ ├── tsconfig.json
 │ ├── tsconfig.app.json
 │ ├── tsconfig.node.json
 │ └── vite.config.ts
 │
+├── package.json
+├── package-lock.json
 ├── .gitignore
 └── README.md
 
-_Estrutura baseada nos arquivos identificados durante a análise do repositório._
-
-## 🚀 Como Executar o Frontend
+## 🚀 Como executar o projeto
 
 ### Pré-requisitos
 
 - Node.js compatível com as dependências do projeto.
 - npm.
-- Git.
+- MySQL para os endpoints da API.
 
 ### 1. Clonar o repositório
 
@@ -89,19 +88,23 @@ git clone https://github.com/cardoso0411/Pastry-menu.git
 
 ### 2. Acessar a pasta do projeto
 
-cd Pastry-menu/Frontend
+cd Pastry-menu
 
 ### 3. Instalar as dependências
 
 npm install
 
-### 4. Iniciar o ambiente de desenvolvimento
+O npm instala as dependências da raiz, de `Backend` e de `Frontend` pelos workspaces.
+
+### 4. Configurar o backend
+
+Copie `Backend/backend.env.example` para `Backend/backend.env` e ajuste as credenciais do MySQL e `PEDIDO_TOKEN_SECRET`. Crie o banco `pastry_menu` e execute `Backend/database/schema.sql` nele. O backend precisa acessar esse banco para iniciar.
+
+### 5. Iniciar frontend e backend
 
 npm run dev
 
-O Vite exibirá no terminal o endereço local para acessar a aplicação.
-
-> **Backend:** a execução depende da implementação do arquivo principal do servidor, da configuração do banco de dados e das variáveis de ambiente necessárias.
+O `concurrently` inicia a API na porta 3001 e o Vite na porta indicada no terminal (normalmente 5173). Execute o comando na raiz do projeto. O frontend encaminha `/api` para o backend. Para iniciar cada serviço separadamente, use `npm run dev:backend` ou `npm run dev:frontend`.
 
 ## 🗺️ Futuras Melhorias
 

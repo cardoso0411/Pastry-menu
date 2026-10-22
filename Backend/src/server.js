@@ -1,4 +1,4 @@
-require('dotenv').config()
+require('dotenv').config({ path: require('node:path').join(__dirname, '../backend.env') })
 
 const crypto = require('node:crypto')
 const express = require('express')
@@ -176,14 +176,14 @@ app.use((error, _request, response, _next) => {
 })
 
 if (!Number.isSafeInteger(establishmentId) || establishmentId < 1 || tokenSecret.length < 32) {
-  console.error('Configure ESTABELECIMENTO_ID e PEDIDO_TOKEN_SECRET (mínimo de 32 caracteres) no Backend/.env.')
+  console.error('Configure ESTABELECIMENTO_ID e PEDIDO_TOKEN_SECRET (mínimo de 32 caracteres) no Backend/backend.env.')
   process.exit(1)
 }
 
 pool.query('SELECT 1')
   .then(() => app.listen(port, () => console.log(`API disponível na porta ${port}`)))
   .catch(error => {
-    console.error('Falha na conexão com MySQL:', error.message)
+    console.error('Falha na conexão com MySQL. Verifique se o servidor está ativo e as credenciais em Backend/backend.env:', error.message)
     process.exitCode = 1
     pool.end()
   })

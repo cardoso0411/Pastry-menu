@@ -1,4 +1,4 @@
-require('dotenv').config()
+require('dotenv').config({ path: require('node:path').join(__dirname, '../backend.env') })
 
 const fs = require('node:fs/promises')
 const path = require('node:path')
@@ -19,7 +19,7 @@ async function main() {
     const [[establishment]] = await connection.execute(
       "SELECT id FROM estabelecimentos WHERE identificador_url = 'pastry-menu' LIMIT 1",
     )
-    console.log(`Dados iniciais carregados. Configure ESTABELECIMENTO_ID=${establishment.id} no .env.`)
+    console.log(`Dados iniciais carregados. Configure ESTABELECIMENTO_ID=${establishment.id} no backend.env.`)
   } finally {
     await connection.end()
   }

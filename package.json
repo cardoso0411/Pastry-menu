@@ -2,10 +2,12 @@
   "name": "pastry-menu",
   "version": "2.0.0",
   "private": true,
+  "workspaces": ["Backend", "Frontend"],
   "scripts": {
     "dev": "concurrently --kill-others --names backend,frontend \"npm:dev:backend\" \"npm:dev:frontend\"",
-    "dev:backend": "npm --prefix Backend run dev",
-    "dev:frontend": "npm --prefix Frontend run dev"
+    "dev:backend": "npm run dev --workspace pastry-menu-backend",
+    "dev:frontend": "npm run dev --workspace pastry-menu-frontend",
+    "build": "npm run build --workspace pastry-menu-frontend"
   },
   "devDependencies": {
     "concurrently": "^10.0.6"
