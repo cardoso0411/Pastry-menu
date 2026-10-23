@@ -48,13 +48,12 @@ O projeto tem como princípios a praticidade, a usabilidade e a eficiência oper
 - **Visual Studio Code:** edição e análise do código.
 
 ## 🏗️ Estrutura do Projeto
-
+```
 Pastry-menu/
 ├── Backend/
 │ ├── src/
 │ ├── database/
 │ ├── backend.env.example
-│ └── package.json
 │
 ├── Frontend/
 │ ├── src/
@@ -73,7 +72,7 @@ Pastry-menu/
 ├── package-lock.json
 ├── .gitignore
 └── README.md
-
+```
 ## 🚀 Como executar o projeto
 
 ### Pré-requisitos
