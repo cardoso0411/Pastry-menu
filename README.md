@@ -143,10 +143,6 @@ As contribuições devem priorizar a organização do código, a clareza das alt
 3. Teste as modificações.
 4. Descreva as alterações realizadas em um Pull Request.
 
-## 📄 Licença
-
-A licença do projeto ainda deverá ser definida pelos responsáveis. Até sua publicação, não se deve presumir autorização para redistribuição ou utilização do código fora das permissões legais aplicáveis.
-
 ## Desenvolvedores
 
 - Bruno Cardoso
